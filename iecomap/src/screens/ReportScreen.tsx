@@ -20,10 +20,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EcoPoint, PointCategory, REPORTABLE_CATEGORIES } from "../types";
 import { authorityFor } from "../routing";
 import { normalizeName, validateName } from "../auth";
+import { newReportId } from "../api/reports";
 
 interface Props {
   onCancel: () => void;
-  onSubmit: (point: EcoPoint) => void;
+  /** Bildirimi gönderir; bitene kadar form "gönderiliyor" durumunda kalır. */
+  onSubmit: (point: EcoPoint) => Promise<void>;
   initialCategory?: PointCategory;
   /** Kayıtlı oturumdaki ad — "Ad Soyad" alanını önceden doldurmak için */
   defaultName?: string;
@@ -142,7 +144,8 @@ export default function ReportScreen({
     }
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    if (submitting) return;
     if (!anonymous) {
       const nErr = validateName(name);
       setNameError(nErr);
@@ -172,7 +175,7 @@ export default function ReportScreen({
     }
     setSubmitting(true);
     const point: EcoPoint = {
-      id: `report-${Date.now()}`,
+      id: newReportId(),
       category,
       title: title.trim(),
       description: description.trim(),
@@ -185,8 +188,11 @@ export default function ReportScreen({
       reporterName: anonymous ? undefined : normalizeName(name),
       district: "Mardin",
     };
-    onSubmit(point);
-    setSubmitting(false);
+    try {
+      await onSubmit(point);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const authority = authorityFor(category);
@@ -338,7 +344,14 @@ export default function ReportScreen({
           onPress={handleSubmit}
           disabled={submitting}
         >
-          <Text style={styles.submitText}>Bildirimi Gönder</Text>
+          {submitting ? (
+            <View style={styles.submittingRow}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.submitText}>Gönderiliyor…</Text>
+            </View>
+          ) : (
+            <Text style={styles.submitText}>Bildirimi Gönder</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -467,4 +480,5 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   submitText: { color: "white", fontSize: 15, fontWeight: "700" },
+  submittingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
 });

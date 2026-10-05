@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EcoPoint, categoryInfo } from "../types";
+import { EcoPoint, REPORT_STATUS_LABEL, ReportStatus, categoryInfo } from "../types";
 import {
   LatLng,
   MODE_LABEL,
@@ -44,6 +44,12 @@ interface Props {
 }
 
 const MODES: TravelMode[] = ["driving", "walking", "bicycling"];
+
+const STATUS_COLORS: Record<ReportStatus, { bg: string; fg: string }> = {
+  yeni: { bg: "#E3F2FD", fg: "#1565C0" },
+  iletildi: { bg: "#FFF3E0", fg: "#E65100" },
+  cozuldu: { bg: "#E8F5E9", fg: "#2E7D32" },
+};
 
 export default function PointDetailSheet({
   point,
@@ -85,6 +91,31 @@ export default function PointDetailSheet({
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {point.pending ? (
+          <View style={styles.statusRow}>
+            <Text style={[styles.statusBadge, { backgroundColor: "#ECEFF1", color: "#455A64" }]}>
+              ⏳ Gönderilmeyi bekliyor (internet gelince gönderilecek)
+            </Text>
+          </View>
+        ) : point.status ? (
+          <View style={styles.statusRow}>
+            <Text
+              style={[
+                styles.statusBadge,
+                { backgroundColor: STATUS_COLORS[point.status].bg, color: STATUS_COLORS[point.status].fg },
+              ]}
+            >
+              {point.status === "cozuldu" ? "✅ " : point.status === "iletildi" ? "📨 " : "🆕 "}
+              {REPORT_STATUS_LABEL[point.status]}
+            </Text>
+          </View>
+        ) : null}
+        {point.authority ? (
+          <Text style={styles.info}>
+            🏛️ Yönlendirilen kurum: <Text style={styles.authority}>{point.authority}</Text>
+          </Text>
+        ) : null}
+
         {point.photoUri ? (
           <View style={styles.photoWrap}>
             <Image source={{ uri: point.photoUri }} style={styles.photo} />
@@ -234,6 +265,16 @@ const styles = StyleSheet.create({
   },
   closeText: { fontSize: 14, color: "#666" },
   photoWrap: { marginTop: 12 },
+  statusRow: { flexDirection: "row", marginTop: 10 },
+  statusBadge: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  authority: { fontWeight: "700", color: "#1a1a1a" },
   photo: { width: "100%", height: 160, borderRadius: 12 },
   locationBadge: {
     position: "absolute",

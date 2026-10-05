@@ -1,7 +1,14 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { flushPendingReports } from "../api/pendingReports";
 
 export default function RootLayout() {
+  // Uygulama açılışında çevrimdışı kuyruktaki bildirimleri göndermeyi dene.
+  useEffect(() => {
+    flushPendingReports().catch(() => {});
+  }, []);
+
   return (
     <>
       <StatusBar style="dark" />

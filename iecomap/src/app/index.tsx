@@ -9,6 +9,8 @@ import { CATEGORIES, EcoPoint, PointCategory, categoryInfo } from "../types";
 import { SEED_POINTS } from "../data/seedPoints";
 import { City, findCity } from "../data/cities";
 import { loadUserReports } from "../storage";
+import { fetchReports } from "../api/reports";
+import { flushPendingReports, loadPendingPoints } from "../api/pendingReports";
 import { loadSession } from "../auth";
 import {
   LatLng,
@@ -48,7 +50,14 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const nav = useTurnByTurn(mapRef);
 
+  /** Eski sürümde yalnızca bu telefona kaydedilmiş bildirimler (sunucuya gönderilmez). */
   const [userReports, setUserReports] = useState<EcoPoint[]>([]);
+  /** Sunucudaki (tüm telefonlardan gelen) bildirimler. */
+  const [remoteReports, setRemoteReports] = useState<EcoPoint[]>([]);
+  /** Çevrimdışı kuyruktaki, henüz gönderilemeyen bildirimler. */
+  const [pendingReports, setPendingReports] = useState<EcoPoint[]>([]);
+  const [showReports, setShowReports] = useState(true);
+  const reportsFailingRef = useRef(false);
   const [activeCategories, setActiveCategories] = useState<Set<PointCategory>>(
     new Set(CATEGORIES.filter((c) => !c.reportOnly).map((c) => c.key))
   );
@@ -108,29 +117,73 @@ export default function MapScreen() {
     };
   }, [selectedCity]);
 
-  // Ekran her odaklandığında (bildirim/giriş ekranından dönüşte dahil) kayıtlı bildirimleri tazele
+  // Ekran odaktayken: bekleyen bildirimleri göndermeyi dene, sunucudaki bildirimleri
+  // çek ve ~30 sn'de bir tazele. Sunucuya ulaşılamazsa son bilinen veriler kalır.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      loadUserReports().then((reports) => {
-        if (!cancelled) setUserReports(reports);
-      });
+
+      async function refresh() {
+        try {
+          const sent = await flushPendingReports();
+          const [pending, legacy] = await Promise.all([loadPendingPoints(), loadUserReports()]);
+          if (cancelled) return;
+          setPendingReports(pending);
+          setUserReports(legacy);
+          if (sent > 0) showNotice(`${sent} bekleyen bildirim gönderildi ✅`, 3500);
+        } catch (e) {
+          console.warn("Yerel bildirimler okunamadı:", e);
+        }
+        try {
+          const remote = await fetchReports();
+          if (cancelled) return;
+          setRemoteReports(remote);
+          reportsFailingRef.current = false;
+        } catch (e) {
+          if (cancelled) return;
+          // Hata mesajını her 30 sn'de bir değil, yalnızca ilk başarısızlıkta göster.
+          if (!reportsFailingRef.current) {
+            const msg = e instanceof Error ? e.message : "Bildirimler yüklenemedi.";
+            showNotice(`${msg} Son bilinen veriler gösteriliyor.`, 5000);
+          }
+          reportsFailingRef.current = true;
+        }
+      }
+
+      refresh();
+      const id = setInterval(refresh, 30_000);
       return () => {
         cancelled = true;
+        clearInterval(id);
       };
     }, [])
   );
 
-  const points = useMemo(() => [...userReports, ...SEED_POINTS], [userReports]);
+  const points = useMemo(() => {
+    // Aynı id birden fazla kaynakta olabilir (ör. kuyruktan yeni gönderilmiş); sunucudaki kazanır.
+    const seen = new Set<string>();
+    const out: EcoPoint[] = [];
+    for (const p of [...remoteReports, ...pendingReports, ...userReports, ...SEED_POINTS]) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+    }
+    return out;
+  }, [remoteReports, pendingReports, userReports]);
+
+  const reportCount = useMemo(
+    () => points.filter((p) => p.isUserReport && categoryInfo(p.category).reportOnly).length,
+    [points]
+  );
 
   const filteredPoints = useMemo(
-    // Bildirim-only kategoriler (elektrik arızası, çevre sorunu, diğer) bir harita
-    // katmanı değildir; kullanıcı bildirimleri her zaman görünür.
+    // Bildirim-only kategoriler (elektrik arızası, çevre sorunu, diğer) ayrı bir
+    // "Bildirimler" anahtarıyla gösterilir (varsayılan: açık).
     () =>
-      points.filter(
-        (p) => activeCategories.has(p.category) || (p.isUserReport && categoryInfo(p.category).reportOnly)
+      points.filter((p) =>
+        p.isUserReport && categoryInfo(p.category).reportOnly ? showReports : activeCategories.has(p.category)
       ),
-    [points, activeCategories]
+    [points, activeCategories, showReports]
   );
 
   function fitToPoints(pts: EcoPoint[]) {
@@ -536,6 +589,9 @@ export default function MapScreen() {
         visible={categoryMenuVisible}
         activeCategories={activeCategories}
         onToggle={toggleCategory}
+        showReports={showReports}
+        reportCount={reportCount}
+        onToggleReports={() => setShowReports((v) => !v)}
         onClose={() => setCategoryMenuVisible(false)}
       />
 

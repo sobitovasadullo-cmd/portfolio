@@ -21,6 +21,10 @@ interface Props {
   activeCategories: Set<PointCategory>;
   onToggle: (category: PointCategory) => void;
   onClose: () => void;
+  /** Kullanıcı bildirimleri (elektrik arızası, çevre sorunu, diğer) haritada gösterilsin mi */
+  showReports: boolean;
+  reportCount: number;
+  onToggleReports: () => void;
 }
 
 export default function CategoryMenu({
@@ -28,6 +32,9 @@ export default function CategoryMenu({
   activeCategories,
   onToggle,
   onClose,
+  showReports,
+  reportCount,
+  onToggleReports,
 }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -65,6 +72,20 @@ export default function CategoryMenu({
               </TouchableOpacity>
             );
           })}
+
+          <Text style={[styles.sectionHeader, { marginTop: 16 }]}>Bildirimler</Text>
+          <TouchableOpacity style={styles.row} onPress={onToggleReports} activeOpacity={0.7}>
+            <Text style={styles.emoji}>📣</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>Kullanıcı Bildirimleri</Text>
+              <Text style={styles.rowSubtitle}>
+                Elektrik arızası, çevre sorunu ve diğer bildirimler · {reportCount} kayıt
+              </Text>
+            </View>
+            <View style={[styles.checkbox, showReports && { backgroundColor: "#E53935", borderColor: "#E53935" }]}>
+              {showReports ? <Text style={styles.checkmark}>✓</Text> : null}
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>

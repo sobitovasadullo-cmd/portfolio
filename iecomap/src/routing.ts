@@ -10,7 +10,7 @@ export interface Authority {
 const ROUTES: Partial<Record<PointCategory, Authority>> = {
   electric_fault: { name: "Dicle Elektrik (DEDAŞ)", hotline: "186" },
   other_issue: { name: "Çevre, Şehircilik ve İklim Değişikliği İl Müdürlüğü", hotline: "181" },
-  other: { name: "ilgili kuruma" },
+  other: { name: "İlgili kurum" },
 };
 
 export function authorityFor(category: PointCategory): Authority {

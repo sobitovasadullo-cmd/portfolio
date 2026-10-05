@@ -115,7 +115,21 @@ export interface EcoPoint {
   district?: string;
   /** Verinin kaynağı (ör. "Google Maps") */
   source?: string;
+  /** Bildirimin işlem durumu (sunucudaki `status`) */
+  status?: ReportStatus;
+  /** Bildirimin yönlendirildiği kurum */
+  authority?: string;
+  /** true ise bildirim henüz sunucuya gönderilemedi (çevrimdışı kuyrukta) */
+  pending?: boolean;
 }
+
+export type ReportStatus = "yeni" | "iletildi" | "cozuldu";
+
+export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  yeni: "Yeni",
+  iletildi: "İlgili kuruma iletildi",
+  cozuldu: "Çözüldü",
+};
 
 export interface UserSession {
   name: string;
