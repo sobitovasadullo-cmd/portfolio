@@ -121,6 +121,8 @@ export interface EcoPoint {
   authority?: string;
   /** true ise bildirim henüz sunucuya gönderilemedi (çevrimdışı kuyrukta) */
   pending?: boolean;
+  /** true ise kullanıcının haritaya uzun basarak bıraktığı geçici hedef */
+  custom?: boolean;
 }
 
 export type ReportStatus = "yeni" | "iletildi" | "cozuldu";

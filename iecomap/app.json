@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.iecomap.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "EcoMap, yakınındaki geri dönüşüm noktalarını göstermek ve bildirimini konumla eşleştirmek için konumunu kullanır.",
+        "NSLocationWhenInUseUsageDescription": "EcoMap, yakınındaki noktaları göstermek, bildirimini konumla eşleştirmek ve uygulama içi navigasyonda seni adım adım yönlendirmek için konumunu kullanır.",
         "NSCameraUsageDescription": "Çevre sorunu bildirirken fotoğraf çekebilmen için kameraya erişim gerekiyor.",
         "NSPhotoLibraryUsageDescription": "Çevre sorunu bildirirken galeriden fotoğraf seçebilmen için erişim gerekiyor."
       }
@@ -38,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "EcoMap, yakınındaki geri dönüşüm noktalarını göstermek ve bildirimini konumla eşleştirmek için konumunu kullanır."
+          "locationWhenInUsePermission": "EcoMap, yakınındaki noktaları göstermek, bildirimini konumla eşleştirmek ve uygulama içi navigasyonda seni adım adım yönlendirmek için konumunu kullanır."
         }
       ],
       [

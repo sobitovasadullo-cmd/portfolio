@@ -72,18 +72,23 @@ export default function PointDetailSheet({
   const meters = route ? route.distanceM : straight;
   const minutes = route ? route.durationMin : straight != null ? estimateMinutes(straight, mode) : null;
   const date = new Date(point.createdAt);
-  // Absürt mesafeleri (ör. 1075 km) bağlamsız göstermemek için.
+  // Mardin dışındaysa (ve hedef uzaktaysa) yalnızca bilgi notu gösterilir; gerçek navigasyon yine mümkün.
   const outside =
-    !!userLocation && (isOutsideMardin(userLocation) || (meters != null && meters > OUTSIDE_MARDIN_M));
+    !point.custom &&
+    !!userLocation &&
+    (isOutsideMardin(userLocation) || (meters != null && meters > OUTSIDE_MARDIN_M));
+  const emoji = point.custom ? "📌" : info.emoji;
+  const badge = point.custom ? "Haritada seçilen nokta" : info.fullLabel;
+  const badgeColor = point.custom ? "#E53935" : info.color;
 
   return (
     <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 8, maxHeight: height * 0.66 }]}>
       <View style={styles.handle} />
       <View style={styles.headerRow}>
-        <Text style={styles.emoji}>{info.emoji}</Text>
+        <Text style={styles.emoji}>{emoji}</Text>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{point.title}</Text>
-          <Text style={[styles.badge, { color: info.color }]}>{info.fullLabel}</Text>
+          <Text style={[styles.badge, { color: badgeColor }]}>{badge}</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={10}>
           <Text style={styles.closeText}>✕</Text>
@@ -146,14 +151,16 @@ export default function PointDetailSheet({
           <View style={styles.outsideBox}>
             <Text style={styles.outsideTitle}>📍 Mardin dışındasınız</Text>
             <Text style={styles.outsideBody}>
-              Mesafe ve rota yalnızca Mardin içinden hesaplanır. Sunum/deneme için Mardin'de bir test
-              konumu kullanabilirsiniz.
+              Gerçek navigasyon bulunduğunuz yerden çalışır. Yakınınızda denemek için haritada bir yere uzun
+              basarak hedef seçebilirsiniz.
             </Text>
-            <TouchableOpacity style={styles.testBtn} onPress={onUseTestLocation} activeOpacity={0.85}>
-              <Text style={styles.testBtnText}>📍 Mardin'de test konumu kullan</Text>
+            <TouchableOpacity onPress={onUseTestLocation} hitSlop={8}>
+              <Text style={styles.testLink}>Mardin test konumu ile simülasyon (isteğe bağlı)</Text>
             </TouchableOpacity>
           </View>
-        ) : meters != null && minutes != null ? (
+        ) : null}
+
+        {meters != null && minutes != null ? (
           <Text style={styles.distance}>
             🧭 {formatDistance(meters)} · {formatMinutes(minutes)}
             {!route || !route.real ? " (tahmini)" : ""}
@@ -177,11 +184,13 @@ export default function PointDetailSheet({
         </View>
 
         <Text style={styles.meta}>
-          {point.source ? `Kaynak: ${point.source} · ` : ""}
-          {date.toLocaleDateString("tr-TR")} ·{" "}
-          {point.isUserReport
-            ? `Kullanıcı bildirimi${point.reporterName ? " · " + point.reporterName : ""}`
-            : "Kayıtlı nokta"}
+          {point.custom
+            ? `📍 ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)} · Uzun basarak başka bir yer seçebilirsiniz.`
+            : `${point.source ? `Kaynak: ${point.source} · ` : ""}${date.toLocaleDateString("tr-TR")} · ${
+                point.isUserReport
+                  ? `Kullanıcı bildirimi${point.reporterName ? " · " + point.reporterName : ""}`
+                  : "Kayıtlı nokta"
+              }`}
         </Text>
       </ScrollView>
 
@@ -207,17 +216,16 @@ export default function PointDetailSheet({
           activeOpacity={0.85}
         >
           <Text style={styles.actionButtonText} numberOfLines={1} adjustsFontSizeToFit>
-            🧭 Başlat
+            🧭 Navigasyonu Başlat
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.shareButton]}
+          accessibilityLabel="Konumu paylaş"
           onPress={() => shareLocation(point.latitude, point.longitude, point.title)}
           activeOpacity={0.85}
         >
-          <Text style={styles.actionButtonText} numberOfLines={1} adjustsFontSizeToFit>
-            📤 Paylaş
-          </Text>
+          <Text style={styles.actionButtonText}>📤</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -329,6 +337,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  shareButton: { backgroundColor: "#43A047", flex: 0.8 },
+  shareButton: { backgroundColor: "#43A047", flex: 0, width: 50 },
+  testLink: { fontSize: 12.5, fontWeight: "700", color: "#1E88E5", marginTop: 8 },
   actionButtonText: { color: "white", fontSize: 13.5, fontWeight: "700" },
 });

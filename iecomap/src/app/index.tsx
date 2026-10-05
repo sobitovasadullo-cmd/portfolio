@@ -23,6 +23,7 @@ import {
 import { fetchWeather, WeatherData } from "../weather";
 import { DistrictAirQuality, fetchMardinAirQuality } from "../airQuality";
 import { useTurnByTurn } from "../hooks/useTurnByTurn";
+import { NAV_PERMISSION_REASON, ensureLocationPermission } from "../permissions";
 import CategoryMenu from "../components/CategoryMenu";
 import CityPicker from "../components/CityPicker";
 import WeatherPanel from "../components/WeatherPanel";
@@ -230,7 +231,7 @@ export default function MapScreen() {
   }
 
   async function handleUseMyLocation() {
-    const target = simulatedLocation ?? (await getUserLocation(true));
+    const target = simulatedLocation ?? (await getUserLocation(true, true));
     if (!target) {
       showNotice("Konum alınamadı. Konum iznini kontrol edin.", 3500);
       return;
@@ -238,12 +239,20 @@ export default function MapScreen() {
     mapRef.current?.animateToRegion({ ...target, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
   }
 
-  async function getUserLocation(forceRefresh = false): Promise<LatLng | null> {
+  /**
+   * Current device location. `interactive` = the user asked for something that needs it,
+   * so we explain and request the permission; otherwise we only read it if already granted.
+   */
+  async function getUserLocation(forceRefresh = false, interactive = false): Promise<LatLng | null> {
     if (userLocation && !forceRefresh) return userLocation;
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return null;
     try {
-      const loc = await Location.getCurrentPositionAsync({});
+      if (interactive) {
+        if (!(await ensureLocationPermission(NAV_PERMISSION_REASON))) return null;
+      } else {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (!perm.granted) return null;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const here = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       setUserLocation(here);
       return here;
@@ -253,25 +262,25 @@ export default function MapScreen() {
   }
 
   /** Returns the origin for routing, or null (with a notice) if unusable. */
-  async function routeOrigin(): Promise<LatLng | null> {
+  async function routeOrigin(fresh: boolean): Promise<LatLng | null> {
     if (simulatedLocation) return simulatedLocation;
-    const from = await getUserLocation();
+    const from = await getUserLocation(fresh, true);
     if (!from) {
-      showNotice("Rota için konum izni gerekli.", 3500);
+      showNotice("Rota için konumunuz alınamadı. Konum iznini ve GPS'i kontrol edin.", 4000);
       return null;
     }
-    if (isOutsideMardin(from)) {
-      showNotice("Mardin dışındasınız. Rota için \"📍 Mardin'de test konumu kullan\" düğmesine dokunun.");
-      return null;
+    // Yalnızca bilgi: Mardin dışında da gerçek navigasyon yapılabilir.
+    if (isOutsideMardin(from) && selectedPoint && !selectedPoint.custom) {
+      showNotice("Mardin dışındasınız; rota bulunduğunuz yerden hesaplanıyor.", 4000);
     }
     return from;
   }
 
-  async function loadRoute(mode: TravelMode, fit: boolean): Promise<RouteResult | null> {
+  async function loadRoute(mode: TravelMode, fit: boolean, fresh = false): Promise<RouteResult | null> {
     if (!selectedPoint) return null;
     setRouteLoading(true);
     try {
-      const from = await routeOrigin();
+      const from = await routeOrigin(fresh);
       if (!from) return null;
       const r = await fetchRoute(from, selectedPoint, mode);
       setRoute(r);
@@ -283,6 +292,9 @@ export default function MapScreen() {
         });
       }
       return r;
+    } catch (e) {
+      showNotice(`Rota alınamadı: ${e instanceof Error ? e.message : String(e)}`, 5000);
+      return null;
     } finally {
       setRouteLoading(false);
     }
@@ -296,9 +308,50 @@ export default function MapScreen() {
 
   async function handleStartNavigation() {
     if (!selectedPoint) return;
-    const r = route && route.mode === travelMode ? route : await loadRoute(travelMode, false);
+    // Gerçek navigasyon: rotayı her zaman güncel konumdan hesapla.
+    const r = simulatedLocation && route && route.mode === travelMode ? route : await loadRoute(travelMode, false, true);
     if (!r) return;
+    // Varsayılan gerçek GPS. Yalnızca kullanıcı Mardin test konumunu seçtiyse simülasyonla başlar
+    // (aksi halde gerçek GPS, test konumundan uzakta olduğu için hemen rotadan çıkmış sayılırdı).
     nav.start({ route: r, destination: selectedPoint, simulated: !!simulatedLocation });
+  }
+
+  function handleToggleSimulation(sim: boolean) {
+    if (!sim && simulatedLocation) {
+      // Test konumundan gerçek GPS'e geçiş: rota gerçek konumdan yeniden hesaplanır.
+      setSimulatedLocation(null);
+    }
+    nav.setSimulated(sim);
+  }
+
+  // Hedefe varınca kutlama mesajını gösterip navigasyonu otomatik bitir.
+  useEffect(() => {
+    if (!nav.arrived) return;
+    showNotice("Hedefe ulaştınız 🎉", 4000);
+    const t = setTimeout(() => handleStopNavigation(), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav.arrived]);
+
+  function handleMapLongPress(coordinate: LatLng) {
+    if (nav.active || aqOn) return;
+    const pin: EcoPoint = {
+      id: "custom-pin",
+      category: "other",
+      title: "Seçilen konum",
+      description: "Haritaya uzun basarak seçtiğiniz hedef.",
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+      createdAt: new Date().toISOString(),
+      custom: true,
+    };
+    setRoute(null);
+    setSelectedPoint(pin);
+    getUserLocation();
+  }
+
+  function stopFollowingOnGesture() {
+    if (nav.active && nav.following) nav.setFollowing(false);
   }
 
   function handleStopNavigation() {
@@ -375,10 +428,18 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={regionFor(DEFAULT_CITY)}
-        showsUserLocation={!simulatedLocation}
+        showsUserLocation={!simulatedLocation && !nav.active}
         showsMyLocationButton={false}
         showsCompass={!nav.active}
+        onLongPress={(e) => handleMapLongPress(e.nativeEvent.coordinate)}
+        onPanDrag={stopFollowingOnGesture}
+        onRegionChangeStart={(_r, details) => {
+          if (details?.isGesture) stopFollowingOnGesture();
+        }}
       >
+        {selectedPoint?.custom ? (
+          <Marker coordinate={selectedPoint} pinColor="#E53935" title="Seçilen konum" />
+        ) : null}
         {!aqOn &&
           filteredPoints.map((point) => {
             const info = categoryInfo(point.category);
@@ -453,7 +514,13 @@ export default function MapScreen() {
         )}
 
         {nav.active && nav.progress ? (
-          <Marker coordinate={nav.progress.position} anchor={{ x: 0.5, y: 0.5 }} flat zIndex={999}>
+          <Marker
+            coordinate={nav.progress.position}
+            anchor={{ x: 0.5, y: 0.5 }}
+            flat
+            rotation={nav.progress.heading}
+            zIndex={999}
+          >
             <View style={[styles.navUser, nav.simulated && styles.navUserSim]}>
               <Text style={styles.navUserArrow}>▲</Text>
             </View>
@@ -581,6 +648,10 @@ export default function MapScreen() {
           rerouting={nav.rerouting}
           error={nav.error}
           destinationTitle={selectedPoint?.title ?? "Hedef"}
+          gps={nav.gps}
+          following={nav.following}
+          onRecenter={() => nav.setFollowing(true)}
+          onToggleSimulation={handleToggleSimulation}
           onStop={handleStopNavigation}
         />
       )}
